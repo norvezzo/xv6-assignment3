@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -183,7 +185,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
-    if(do_free){
+    if(do_free && !(*pte & PTE_S)){ // free only if owned by the process
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
     }
@@ -436,4 +438,59 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+uint64
+map_shared_pages(struct proc* src_proc, struct proc* dst_proc, uint64 src_va, uint64 size) 
+{
+    if (size == 0)
+        return 0;
+
+    uint64 src_start = PGROUNDDOWN(src_va);
+    uint64 src_end = PGROUNDUP(src_va + size);
+    uint64 npages = (src_end - src_start) / PGSIZE;
+
+    uint64 dst_va = PGROUNDUP(dst_proc->sz);
+    dst_proc->sz = dst_va + (npages * PGSIZE); // increase dst_proc size
+
+    for (uint64 i = 0; i < npages; i++) {
+        pte_t *pte = walk(src_proc->pagetable, src_start + i * PGSIZE, 0);
+        if (!pte || !(*pte & PTE_V) || !(*pte & PTE_U))
+            return 0; // fail if page not mapped or not user
+
+        uint64 pa = PTE2PA(*pte);
+        int flags = PTE_FLAGS(*pte) | PTE_S;
+        if (mappages(dst_proc->pagetable, dst_va + i * PGSIZE, PGSIZE, pa, flags) < 0)
+            return 0;
+    }
+
+    // return dst_proc virtual address with offset into page
+    return dst_va + (src_va - src_start);
+}
+
+uint64
+unmap_shared_pages(struct proc *p, uint64 addr, uint64 size) 
+{
+    if (size == 0)
+        return -1;
+
+    uint64 start = PGROUNDDOWN(addr);
+    uint64 end = PGROUNDUP(addr + size);
+    int npages = (end - start) / PGSIZE;
+
+    // validation: ensure all pages are shared and mapped
+    for (uint64 a = start; a < end; a += PGSIZE) {
+        pte_t *pte = walk(p->pagetable, a, 0);
+        if (!pte || !(*pte & PTE_V) || !(*pte & PTE_S)) {
+            return -1; // not mapped or not shared
+        }
+    }
+
+    // safe to unmap now
+    uvmunmap(p->pagetable, start, npages, 0); // do_free = 0
+
+    if (end == PGROUNDUP(p->sz))
+        p->sz = start;
+
+    return 0;
 }
