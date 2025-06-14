@@ -100,10 +100,10 @@ sys_map_shared_pages(void)
     argint(1, &pid);
     argaddr(2, &size);
 
-    struct proc *dst = find_proc_by_pid(pid); // helper function
-    if (!dst) return -1;
+    struct proc *src = find_proc_by_pid(pid); // helper function
+    if (!src) return -1;
 
-    return map_shared_pages(myproc(), dst, src_va, size);
+    return map_shared_pages(src, myproc(), src_va, size);
 }
 
 uint64

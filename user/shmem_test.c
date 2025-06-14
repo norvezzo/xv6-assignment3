@@ -11,70 +11,52 @@ main(int argc, char *argv[])
   if (argc > 1 && strcmp(argv[1], "keep") == 0)
     disable_unmap = 1;
 
-  int p[2]; // pipe to send mapped VA to child
-  pipe(p);
+  int parent_pid = getpid();
+  void *shared = malloc(SHARED_SIZE);
+  if (!shared) {
+    printf("Parent malloc failed\n");
+    exit(1);
+  }
+
+  uint64 shared_va = (uint64)shared;
+  uint64 parent_sz_before = (uint64)sbrk(0);
 
   int pid = fork();
-
   if (pid < 0) {
     printf("fork failed\n");
     exit(1);
   }
 
   if (pid == 0) {
-    close(p[1]);
-    // read mapped VA from parent
-    uint64 child_va;
-    if (read(p[0], &child_va, sizeof(child_va)) != sizeof(child_va)) {
-      printf("Child failed to read address\n");
-      exit(1);
-    }
-    close(p[0]);
-
+    // --- Child ---
     printf("Child size before mapping: %d\n", sbrk(0));
 
-    // write to the shared memory using received address
-    char *shared = (char *)child_va;
-    strcpy(shared, "Hello daddy");
+    void *mapped = map_shared_pages((void *)shared_va, parent_pid, SHARED_SIZE);
+    if (!mapped) {
+      printf("Child mapping failed\n");
+      exit(1);
+    }
 
+    strcpy((char *)mapped, "Hello daddy");
     printf("Child size after mapping: %d\n", sbrk(0));
 
     if (!disable_unmap) {
-      if (unmap_shared_pages(shared, SHARED_SIZE) == 0)
+      if (unmap_shared_pages(mapped, SHARED_SIZE) == 0)
         printf("Child size after unmapping: %d\n", sbrk(0));
     }
 
-    void *new_mem = malloc(256);
-    if (new_mem)
+    void *m = malloc(256);
+    if (m)
       printf("Child size after malloc: %d\n", sbrk(0));
     else
       printf("Child malloc failed\n");
-    
+
     exit(0);
-
-  } else {
-    close(p[0]);
-    // allocate memory after fork so it's only in the parent
-    char *shared = malloc(SHARED_SIZE);
-    if (!shared) {
-      printf("Parent malloc failed\n");
-      exit(1);
-    }
-
-    // map to child process
-    uint64 mapped_va = (uint64) map_shared_pages(shared, pid, SHARED_SIZE);
-    if (mapped_va == 0) {
-      printf("Parent map_shared_pages failed\n");
-      exit(1);
-    }
-
-    // send mapped VA to child
-    write(p[1], &mapped_va, sizeof(mapped_va));
-    close(p[1]);
-
-    wait(0); // wait for child
-
-    printf("Parent reads: %s\n", shared);
+  } 
+  else {
+    // --- Parent ---
+    wait(0);
+    printf("Parent reads: %s\n", (char *)shared);
 
     exit(0);
   }
