@@ -19,7 +19,6 @@ main(int argc, char *argv[])
   }
 
   uint64 shared_va = (uint64)shared;
-  uint64 parent_sz_before = (uint64)sbrk(0);
 
   int pid = fork();
   if (pid < 0) {

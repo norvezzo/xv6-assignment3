@@ -4,6 +4,7 @@
         "riscv.h": "c",
         "defs.h": "c",
         "proc.h": "c",
-        "memlayout.h": "c"
+        "memlayout.h": "c",
+        "msg_protocol.h": "c"
     },
 }
