@@ -479,8 +479,8 @@ unmap_shared_pages(struct proc *p, uint64 addr, uint64 size)
     int npages = (end - start) / PGSIZE;
 
     // validation: ensure all pages are shared and mapped
-    for (uint64 a = start; a < end; a += PGSIZE) {
-        pte_t *pte = walk(p->pagetable, a, 0);
+    for (uint64 i = start; i < end; i += PGSIZE) {
+        pte_t *pte = walk(p->pagetable, i, 0);
         if (!pte || !(*pte & PTE_V) || !(*pte & PTE_S)) {
             return -1; // not mapped or not shared
         }
