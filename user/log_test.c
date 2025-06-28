@@ -1,15 +1,9 @@
 #include "kernel/types.h"
-#include "kernel/stat.h"
 #include "user/user.h"
 
 #define PGSIZE 4096
 #define NCHILDREN 8
 #define HEADER_COMPLETE_BIT (1 << 31)
-
-struct log_header {
-  uint16 index;
-  uint16 length;
-} __attribute__((packed));
 
 uint32
 encode_header(uint16 index, uint16 length, int complete) {
@@ -85,8 +79,6 @@ write_log_messages(char *buffer, uint16 index) {
           memmove(ptr + 4, msg, short_len);
           __sync_synchronize(); // memory barrier
           __sync_lock_test_and_set((uint32*)ptr, encode_header(index, short_len, 1));
-          __sync_synchronize();
-          //*(uint32*)ptr = encode_header(index, short_len, 1);
         }
         else 
           printf("child %d: failed to reserve partial slot at %p\n", index, ptr);
@@ -99,10 +91,9 @@ write_log_messages(char *buffer, uint16 index) {
       memmove(ptr + 4 + base_len, numbuf, num_len);
       __sync_synchronize(); // memory barrier
       __sync_lock_test_and_set((uint32*)ptr, encode_header(index, total_len, 1));
-      __sync_synchronize();
-      //*(uint32*)ptr = encode_header(index, total_len, 1);
       ptr += 4 + total_len;
       i++;
+      // remove '//' to include fairness
       //sleep(1);
     } else {
       uint32 hdr = *(uint32*)ptr;
@@ -116,8 +107,6 @@ int
 main(int argc, char *argv[]) {
   int parent_pid = getpid();
   void *shared = malloc(PGSIZE);
-  memset(shared, 0xAA, PGSIZE);
-  __sync_synchronize();
 
   if (!shared) {
     printf("malloc failed\n");
@@ -145,7 +134,7 @@ main(int argc, char *argv[]) {
     }
   }
 
-  // Parent: read logs
+  // parent part
   char *ptr = shared;
   char *end = ptr + PGSIZE;
 
@@ -157,31 +146,21 @@ main(int argc, char *argv[]) {
     uint32 raw = *(uint32*)ptr;
 
     if (raw == 0) {
-      if ((end - ptr) < 5) {
-      // Not enough space for a full message — done
-      break;
-      } else {
-      // Incomplete header: probably not written yet
+      if ((end - ptr) < 5) 
+        break;
       continue;
-      }
     }
 
-    if (!is_header_complete(raw)) {
-      printf("incomplete header at %p: raw=0x%x\n", ptr, raw);
+    // checking if child finished writing message
+    if (!is_header_complete(raw)) 
       continue;
-    }
-    else
-      printf("parent read complete header at %p\n", ptr);
 
     uint16 index = get_header_index(raw);
     uint16 length = get_header_length(raw);
 
     // Sanity check: length must be reasonable
-    if (length == 0 || length > (end - ptr - 4)) {
-      printf("!!! CORRUPTED HEADER at %p: raw=0x%x, index=%d, length=%d, remaining=%d\n",
-       ptr, raw, index, length, (int)(end - ptr - 4));
+    if (length == 0 || length > (end - ptr - 4)) 
       break;  // stop reading further — prevent segfaults
-    }
 
     printf("[child %d] ", index);
     write(1, ptr + 4, length);

@@ -27,7 +27,6 @@ main(int argc, char *argv[])
   }
 
   if (pid == 0) {
-    // --- Child ---
     printf("Child size before mapping: %d\n", sbrk(0));
 
     void *mapped = map_shared_pages((void *)shared_va, parent_pid, SHARED_SIZE);
@@ -53,7 +52,6 @@ main(int argc, char *argv[])
     exit(0);
   } 
   else {
-    // --- Parent ---
     wait(0);
     printf("Parent reads: %s\n", (char *)shared);
 

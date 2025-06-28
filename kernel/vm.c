@@ -451,7 +451,7 @@ map_shared_pages(struct proc* src_proc, struct proc* dst_proc, uint64 src_va, ui
     uint64 npages = (src_end - src_start) / PGSIZE;
 
     uint64 dst_va = PGROUNDUP(dst_proc->sz);
-    dst_proc->sz = dst_va + (npages * PGSIZE); // increase dst_proc size
+    dst_proc->sz = dst_va + (npages * PGSIZE);
 
     for (uint64 i = 0; i < npages; i++) {
         pte_t *pte = walk(src_proc->pagetable, src_start + i * PGSIZE, 0);
@@ -464,7 +464,6 @@ map_shared_pages(struct proc* src_proc, struct proc* dst_proc, uint64 src_va, ui
             return 0;
     }
 
-    // return dst_proc virtual address with offset into page
     return dst_va + (src_va - src_start);
 }
 
@@ -478,7 +477,6 @@ unmap_shared_pages(struct proc *p, uint64 addr, uint64 size)
     uint64 end = PGROUNDUP(addr + size);
     int npages = (end - start) / PGSIZE;
 
-    // validation: ensure all pages are shared and mapped
     for (uint64 i = start; i < end; i += PGSIZE) {
         pte_t *pte = walk(p->pagetable, i, 0);
         if (!pte || !(*pte & PTE_V) || !(*pte & PTE_S)) {
@@ -486,7 +484,6 @@ unmap_shared_pages(struct proc *p, uint64 addr, uint64 size)
         }
     }
 
-    // safe to unmap now
     uvmunmap(p->pagetable, start, npages, 0); // do_free = 0
 
     if (end == PGROUNDUP(p->sz))
