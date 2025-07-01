@@ -80,21 +80,19 @@ write_log_messages(char *buffer, uint16 index) {
           __sync_synchronize(); // memory barrier
           __sync_lock_test_and_set((uint32*)ptr, encode_header(index, short_len, 1));
         }
-        else 
-          printf("child %d: failed to reserve partial slot at %p\n", index, ptr);
       }
       break;
     }
 
     if (__sync_val_compare_and_swap((uint32*)ptr, 0, encode_header(index, total_len, 0)) == 0) {
       memmove(ptr + 4, msg, base_len);
-      memmove(ptr + 4 + base_len, numbuf, num_len);
+      memmove(ptr + 4 + base_len, numbuf, num_len); // adding the child index
       __sync_synchronize(); // memory barrier
       __sync_lock_test_and_set((uint32*)ptr, encode_header(index, total_len, 1));
       ptr += 4 + total_len;
       i++;
       // remove '//' to include fairness
-      //sleep(1);
+      // sleep(1);
     } else {
       uint32 hdr = *(uint32*)ptr;
       uint16 skip = get_header_length(hdr);
@@ -158,7 +156,6 @@ main(int argc, char *argv[]) {
     uint16 index = get_header_index(raw);
     uint16 length = get_header_length(raw);
 
-    // Sanity check: length must be reasonable
     if (length == 0 || length > (end - ptr - 4)) 
       break;  // stop reading further — prevent segfaults
 
