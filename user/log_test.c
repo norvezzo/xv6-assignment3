@@ -141,20 +141,20 @@ main(int argc, char *argv[]) {
     if (ptr + 4 > end)
       break;
 
-    uint32 raw = *(uint32*)ptr;
+    uint32 hdr = *(uint32*)ptr;
 
-    if (raw == 0) {
+    if (hdr == 0) {
       if ((end - ptr) < 5) 
         break;
       continue;
     }
 
     // checking if child finished writing message
-    if (!is_header_complete(raw)) 
+    if (!is_header_complete(hdr)) 
       continue;
 
-    uint16 index = get_header_index(raw);
-    uint16 length = get_header_length(raw);
+    uint16 index = get_header_index(hdr);
+    uint16 length = get_header_length(hdr);
 
     if (length == 0 || length > (end - ptr - 4)) 
       break;  // stop reading further — prevent segfaults
